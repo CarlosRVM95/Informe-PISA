@@ -1,0 +1,119 @@
+---
+title: "Informe Pisa"
+author: "Carlos Rodríguez-Viña Martínez"
+date: "9/11/2020"
+output: html_document
+---
+Los modelos GAM permiten obtener ajustes no lineales empleando múltiples predictores. Son el resultado de extender un modelo lineal múltiple permitiendo que cada elemento del modelo sea una función no lineal de un predictor y manteniendo la aditividad. Son por lo tanto una combinación lineal de funciones no lineales.
+
+El resultado es un modelo aditivo en el que se calcula una función no lineal fj separada para cada predictor Xj y luego se suman todas sus contribuciones.
+
+Que los modelos GAM sean aditivos permite analizar la influencia de cada predictor sobre la variable respuesta de forma individual, algo muy útil a la hora de hacer inferencia
+
+Procedemos a cargar las librerías que vamos a utilizar 
+```{r echo=FALSE, warning=FALSE,error= TRUE, message=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(gvlma)
+library(MASS)
+library(car)
+library(ISLR)
+library(splines)
+library(gam)
+library(PerformanceAnalytics)
+
+```
+
+Lo primero que vamos a realizar es cargar el dataset con el que vamos a trabajar y vamos a proceder a dar un nombre a este data set
+```{r echo=FALSE, message=FALSE}
+PISA<- read_csv("pisasci2006.csv")
+attach(PISA)
+```
+
+Una vez que hemos revisado el dataset, observamos que existen varios valores dentro del dataframe con valores NA, es por ello que vamos a susitutir los valores NA por la media de cada variable
+```{r echo = FALSE}
+PISA$Overall[is.na(PISA$Overall)] <- round(mean(PISA$Overall, na.rm = TRUE))
+PISA$Issues[is.na(PISA$Issues)] <- round(mean(PISA$Issues, na.rm = TRUE))
+PISA$Explain[is.na(PISA$Explain)] <- round(mean(PISA$Explain, na.rm = TRUE))
+PISA$Evidence[is.na(PISA$Evidence)] <- round(mean(PISA$Evidence, na.rm = TRUE))
+PISA$Interest[is.na(PISA$Interest)] <- round(mean(PISA$Interest, na.rm = TRUE))
+PISA$Support[is.na(PISA$Support)] <- round(mean(PISA$Support, na.rm = TRUE))
+PISA$Income[is.na(PISA$Income)] <- round(mean(PISA$Income, na.rm = TRUE))
+PISA$Health[is.na(PISA$Health)] <- round(mean(PISA$Health, na.rm = TRUE))
+PISA$Edu[is.na(PISA$Edu)] <- round(mean(PISA$Edu, na.rm = TRUE))
+PISA$HDI[is.na(PISA$HDI)] <- round(mean(PISA$HDI, na.rm = TRUE))
+```
+
+Observarmos cual es la linealidad de nuestras variables con respecto de Y.
+```{r}
+plot(PISA$Overall, PISA$Issues)
+plot(PISA$Overall, PISA$Explain)
+plot(PISA$Overall, PISA$Evidence)
+plot(PISA$Overall, PISA$Interest)
+plot(PISA$Overall, PISA$Support)
+plot(PISA$Overall, PISA$Income)
+plot(PISA$Overall, PISA$Health)
+plot(PISA$Overall, PISA$Edu)
+plot(PISA$Overall, PISA$HDI)
+```
+Observamos que las variables Issues, Explain y Evidence mantienen una relación lineal con respecto de la variable Overall, por lo que no será necesario realizar ningún tipo de smooth a dicha variable.
+
+Una vez que hemos eliminado las variables que son lineales con respecto a "Overall".
+
+# Modelo GAM
+
+### Grados de Libertad
+
+Primero vamos a obtenr los grados de libertad de cada una de las varibales, de tal manera que cuando proceda a realizar suavización de las variables conozca cuales son los K puntos de cada variable. Para ello vamos a realizar la validación cruzada de cada variable.
+```{r warning=FALSE,error= TRUE}
+smooth.spline(x = PISA$Interest, y = PISA$Overall, cv = TRUE) # 4.74
+smooth.spline(x = PISA$Income, y = PISA$Overall, cv = TRUE) # 9.4
+smooth.spline(x = PISA$Support, y = PISA$Overall, cv = TRUE) # 2.00
+smooth.spline(x = PISA$Health, y = PISA$Overall, cv = TRUE) # 2
+smooth.spline(x = PISA$Edu, y = PISA$Overall, cv = TRUE) # 5.9
+smooth.spline(x = PISA$HDI, y = PISA$Overall, cv = TRUE) # 6,56
+```
+
+### Función GAM
+
+Una vez que conocemos cuales son los grados de libertad de cada variable, procedemos a construir la función gam
+```{r}
+modelo_gam <- gam (Overall ~  s(Interest,5) + s(Support,10) + s(Income,2) + s(Health,2) + s(Edu,6)
+                   + s(HDI,7), data = PISA)
+
+
+plot(modelo_gam, se = TRUE, col = "red")
+summary(modelo_gam)
+```
+Observamos que las variables interest, support e Income, con el resto de variables sus pvalores me
+indican no muestra evidencias de que la relación entre ellas no es lineal y por ende
+preguntarse si sería mejor emplear un ajuste lineal en lugar de una smooth spline, reduciendo así la complejidad del modelo
+
+Procedemos a construir dos modelos más, uno donde las variables con el p-valor del modelo 1, mantengan una relación lineal o utilizando local regression utilizaremos un span = 0.7
+```{r}
+modelo_gam2 <- gam (Overall ~  s(Interest,5) + s(Support,10) + s(Income,2) + Health + Edu
+                   + HDI, data = PISA)
+
+plot(modelo_gam2, se = TRUE, col = "red")
+summary(modelo_gam2)
+
+
+modelo_gam3 <- gam (Overall ~  s(Interest,5) + s(Support,10) + s(Income,2) + lo(Health,span = 0.7) + lo(Edu, span = 0.7)
+                    + lo(HDI, span = 0.7), data = PISA)
+
+plot(modelo_gam3, se = TRUE, col = "red")
+summary(modelo_gam3)
+```
+### ANOVA
+
+Procedemos a realizar una comparación de los modelos medieante ANOVA.
+```{r}
+anova(modelo_gam,modelo_gam2,modelo_gam3, test = 'F')
+```
+Concluimos que el modelo 2 es el mejor.
+
+
+
+
